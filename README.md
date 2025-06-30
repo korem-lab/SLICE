@@ -1,9 +1,9 @@
 **SLICE**
 =============
 <!-- badges: start -->
-[![main](https://github.com/korem-lab/SLICE/actions/workflows/main.yml/badge.svg)](https://github.com/korem-lab/SLICE/actions/workflows/main.yml)
+<!-- [![main](https://github.com/korem-lab/SLICE/actions/workflows/main.yml/badge.svg)](https://github.com/korem-lab/SLICE/actions/workflows/main.yml)
 <!-- badges: end -->
-<img src='vignettes/SLICE-logo.png' align="right" height="250" />
+<img src='vignettes/SLICE_logo.png' align="right" height="250" />
 
 # TEMPORARY
 
