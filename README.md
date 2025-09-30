@@ -5,37 +5,33 @@
 <!-- badges: end -->
 <img src='vignettes/SLICE_logo.png' align="right" height="250" />
 
-# TEMPORARY
+### SLICE - Site-Level Independent Cross-Evaluation
 
-Building this light package to apply to a few other projects, most documentation doesn't apply here. (Most is just copied from RebalancedCV, since a lot of the package's inner workings are similar).
-
-### Site-Level Independent Cross-Evaluation
-
-This is a python package designed to facilitate conservative cross-validations schemes that account for complex multi-level experimental designs in computational biology. To begin using SLICE, we recommend reading it's [documentation pages](https://korem-lab.github.io/SLICE/).
+This is a python package designed to facilitate conservative cross-validations schemes that account for complex multi-level experimental designs in computational biology. To begin using SLICE, we recommend reading this README and implementing the code demonstration below.
+<!--  reading it's [documentation pages](https://korem-lab.github.io/SLICE/). -->
 
 
-All classes from this package provide train/test indices to split data in train/test sets while rebalancing the training set to account for distributional bias. This package is designed to enable automated rebalancing for the cross-valition implementations in formats similar to scikit-learn's `LeaveOneGroupOut`. These classes are designed to work in the exact same code structure and implementation use cases as their scikit-learn equivalents, with the only difference being a subsampling within the provided training indices.
-
+All classes from this package provide train/test indices to split data in train/test sets to account for potential multi-layer batch biases. This package is designed to enable automated cross-validation in a format similar to scikit-learn's `LeaveOneGroupOut`. 
 For any support using SLICE, please use our <a href="https://github.com/korem-lab/SLICE/issues">issues page</a> or email: gia2105@columbia.edu.
 
 **Installation**
 -------------------
 ```bash
-pip install SLICE
+pip install git+https://github.com/korem-lab/SLICE.git
 ```
 The dependencies for SLICE are python, numpy, and scikit-learn. Is has been developed and tested using python 3.6 - 3.12. Only standard hardware is required for SLICE. The typical install time for SLICE is less that 15 seconds. 
 
 
 **Example**
 -----------------
-We demonstrate the following snippet of code to utilize out rebalanced leave-one-out implementation, using an observation matrix `X` and a binary outcome vector `y`. We demonstrate it using scikit-learn's `LogisticRegressionCV`, although this can be replaced with any training/tuning/predicting scheme. The expected runtime for the RebalancedCV package's operations are less than 5 seconds, while the overall example is expected to complete in less than one minute on most machines.
+We demonstrate the following snippet of code to utilize SLICE, using an observation matrix `X`, a binary outcome vector `y`, and two batch groupings `b1` and `b2`. We demonstrate it using scikit-learn's `LogisticRegressionCV`, although this can be replaced with any training/tuning/predicting scheme. The expected runtime for the SLICE package's operations are less than 5 seconds, while the overall example is expected to complete in less than one minute on most machines.
 
 ```python
 import numpy as np 
 import pandas as pd
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.model_selection import LeaveOneOut
-from rebalancedcv import RebalancedLeaveOneOut
+from slice import SliceOneGroupOut
 from sklearn.metrics import roc_auc_score
 np.random.seed(1)
 
@@ -74,15 +70,14 @@ print('Rebalanceed Leave-one-out auROC: {:.2f}'\
     Rebalanceed Leave-one-out auROC: 0.48
 
 
-As demontrated in this example, neglecting to account for distributional bias in the cross-valiation classes can greatly decrease evaluated model performance. For more details on why this happens, please refer to Austin, G.I. et al. “Distributional bias compromises leave-one-out cross-validation” (2024). https://arxiv.org/abs/2406.01652. 
+As demontrated in this example, neglecting to account for inner batch structures cann introduce biases in evaluations.
 
 
-We note that the example's code structure appraoch would apply to this package's other `RebalancedKFold` and `RebalancedLeavePOut` classes.
 
 **Classes**
 ---------
 
-### SLiceOneGroupOut
+### SliceOneGroupOut
 
 Provides train/test indices to split data in train/test sets with rebalancing to ensure that all training folds have identical class balances. Each sample is used once as a test set, while the remaining samples form the training set. See sklearn.model_selection.LeaveOneOut for more details on Leave-one-out cross-validation. 
 
@@ -112,45 +107,8 @@ Provides train/test indices to split data in `n_splits` folds, with rebalancing 
         See :term:`Glossary <random_state>`.
 
 
-### RebalancedLeavePOut
-
-Provides train/test indices to split data in train/test sets with rebalancing to ensure that all training folds have identical class balances. This cross-validation tests on all distinct samples of size p, while a remaining n - 2p samples form the training set in each iteration, with an additional `p` samples used to subsamples from within the training set.
-(see sklearn.model_selection.LeavePOut for more details).
-
-##### **Parameters**
-     p : int
-        Size of the test sets. Must be strictly less than one half of the number of samples.
-        
-
-### RebalancedLeaveOneOutRegression
-
-Designed for regression tasks. Provides train/test indices to split data in train/test sets with rebalancing to ensure that all training folds have similar labels balances. Each sample is used once as a test set, while the remaining samples form the training set. See sklearn.model_selection.LeaveOneOut for more details on Leave-one-out cross-validation. 
-
-##### **Parameters**
-No parameters are used for this class 
-
-**Parameters for `.split()` method**
-----------
-All three of this package's classes use the `split` method, which all use the following parameters.
-`X` : array-like of shape (n_samples, n_features); Training data, where `n_samples` is the number of samples and `n_features` is the number of features.
-
-`y` : array-like of shape (n_samples,); The target variable for supervised learning problems.  At least two observations per class are needed for RebalancedLeaveOneOut
-
-`groups` : array-like of shape (n_samples,), default=None; Group labels for the samples used while splitting the dataset into
-    train/test set.
-    
-`seed` : Integer, default=None; can be specified to enforce consistency in the subsampling
-
-**Yields**
--------
-`train_index` : ndarray
-    The training set indices for that split.
-    
-`test_index` : ndarray
-    The testing set indices for that split.
-
-
 
 **Citation**
 -------
+TBD
 Austin, G.I. et al. “Conservative evaluation demonstrates tumor-specific microbial signatures that generalize across processing pipelines” (2025). LINK TBD
