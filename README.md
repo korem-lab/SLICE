@@ -28,46 +28,70 @@ We demonstrate the following snippet of code to utilize SLICE, using an observat
 
 ```python
 import numpy as np 
-import pandas as pd
 from sklearn.linear_model import LogisticRegressionCV
-from sklearn.model_selection import LeaveOneOut
+from sklearn.model_selection import LeaveOneGroupOut
 from slice import SliceOneGroupOut
 from sklearn.metrics import roc_auc_score
-np.random.seed(1)
 
-## given some random `X` matrix, and a `y` binary vector
-X = np.random.rand(100, 10)
-y = np.random.rand(100) > 0.5
+np.random.seed(0)
+n_samples=750
+n_features=25
+n_b1 = 7
+n_b2 = 3
 
-## Leave-one-out evaluation
-loo = LeaveOneOut()
-loocv_predictions = [ LogisticRegressionCV()\
-                                .fit(X[train_index], y[train_index])\
-                                .predict_proba(X[test_index]
-                                            )[:, 1][0]
-              for train_index, test_index in loo.split(X, y) ]
+## given some random `X` matrix, and two categorical batch groupings
+X = np.random.normal(size=(n_samples, n_features))
+b1 = np.random.randint(low=0, high=n_b1, size=n_samples)
+b2 = np.random.randint(low=0, high=n_b2, size=n_samples)
 
-## Since all the data is random, a fair evaluation
-## should yield au auROC close to 0.5
-print('Leave One Out auROC: {:.2f}'\
-              .format( roc_auc_score(y, loocv_predictions) ) )
+## simulate batch biases for X and label y, for simplicity we'll just add biased noise to X
+b1_biases = np.random.normal(scale=0.25, size=(n_b1, n_features))
+b2_biases = np.random.normal(scale=0.25, size=(n_b2, n_features))
+X += b1_biases[b1] + b2_biases[b2]
 
-## Rebalanced leave-one-out evaluation
-rloo = RebalancedLeaveOneOut()
-rloocv_predictions = [ LogisticRegressionCV()\
-                                .fit(X[train_index], y[train_index])\
-                                .predict_proba(X[test_index]
-                                            )[:, 1][0]
-              for train_index, test_index in rloo.split(X, y) ]
+## generate y labels, only biased by batches, no direct relationship with X
+##     Therefore, by construction, an unbiased auROC is approx. 0.5
+b1_label_biases = np.random.normal(loc=b1, scale=.7)
+b2_label_biases = 0* np.random.normal(loc=b2, scale=5)
+y = ( b1_label_biases + b2_label_biases ) > 0
 
-## Since all the data is random, a fair evaluation
-## should yield au auROC close to 0.5
-print('Rebalanceed Leave-one-out auROC: {:.2f}'\
-              .format(  roc_auc_score(y, rloocv_predictions) ) )
+## Run Cross-validations
+
+## Leave-one-group-out auROCs
+logo=LeaveOneGroupOut()
+logo_aurocs = [ roc_auc_score(y[test_index],
+                              LogisticRegressionCV(solver='newton-cg')\
+                                        .fit(X[train_index], y[train_index])\
+                                        .predict_proba(X[test_index]
+                                                    )[:, 1]
+                             )
+              for train_index, test_index in logo.split(X, y, b2) ]
+
+## SLICE-one-group-out auROCs
+sogo=SliceOneGroupOut()
+sogo_aurocs = [ roc_auc_score(y[test_index],
+                              LogisticRegressionCV(solver='newton-cg')\
+                                        .fit(X[train_index], 
+                                             y[train_index])\
+                                        .predict_proba(X[test_index]
+                                                    )[:, 1]
+                             )
+              for train_index, test_index in sogo.split(X, 
+                                                        y, 
+                                                        groups=b2, 
+                                                        secondary_groups=b1) ]
+
+## the unaccounted bias from an inner batch grouping produced erronesouly high auROCs
+##      even in a standard 'Leave-one-batch-out' approach
+print("Leave-one-group-out auROCs:", *map("{:.2f}".format, logo_aurocs))
+
+## SLICE resolved these biases, producing the correct null performance
+##      by accounting for both batch leyers during cross-validation
+print("Leave-one-group-out auROCs:", *map("{:.2f}".format, sogo_aurocs))
 ```
 
-    Leave One Out auROC: 0.00
-    Rebalanceed Leave-one-out auROC: 0.48
+    Leave-one-group-out auROCs: 0.64 0.73 0.71
+    Leave-one-group-out auROCs: 0.44 0.50 0.46
 
 
 As demontrated in this example, neglecting to account for inner batch structures cann introduce biases in evaluations.
