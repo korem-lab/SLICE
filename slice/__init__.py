@@ -6,6 +6,7 @@ from sklearn.utils.validation import _num_samples, check_array, column_or_1d
 # from sklearn.utils.metadata_routing import _MetadataRequester
 import numpy as np
 import pandas as pd
+from inspect import signature
 
 # from abc import ABCMeta, abstractmethod
 
@@ -14,6 +15,98 @@ from sklearn.utils.validation import _deprecate_positional_args
 from sklearn.utils.multiclass import type_of_target
 from abc import ABCMeta, abstractmethod
 from itertools import chain, combinations
+
+
+def _pprint(params, offset=0, printer=repr):
+    """TAKEN DIRECTLY FROM SKLEARN TO ENABLE SIMILAR FUNCTIONALTITY IN SliceOneGroupOut"""
+    """Pretty print the dictionary 'params'
+
+    Parameters
+    ----------
+    params : dict
+        The dictionary to pretty print
+
+    offset : int, default=0
+        The offset in characters to add at the begin of each line.
+
+    printer : callable, default=repr
+        The function to convert entries to strings, typically
+        the builtin str or repr
+
+    """
+    # Do a multi-line justified repr:
+    options = np.get_printoptions()
+    np.set_printoptions(precision=5, threshold=64, edgeitems=2)
+    params_list = list()
+    this_line_length = offset
+    line_sep = ",\n" + (1 + offset // 2) * " "
+    for i, (k, v) in enumerate(sorted(params.items())):
+        if isinstance(v, float):
+            # use str for representing floating point numbers
+            # this way we get consistent representation across
+            # architectures and versions.
+            this_repr = "%s=%s" % (k, str(v))
+        else:
+            # use repr of the rest
+            this_repr = "%s=%s" % (k, printer(v))
+        if len(this_repr) > 500:
+            this_repr = this_repr[:300] + "..." + this_repr[-100:]
+        if i > 0:
+            if this_line_length + len(this_repr) >= 75 or "\n" in this_repr:
+                params_list.append(line_sep)
+                this_line_length = len(line_sep)
+            else:
+                params_list.append(", ")
+                this_line_length += 2
+        params_list.append(this_repr)
+        this_line_length += len(this_repr)
+
+    np.set_printoptions(**options)
+    lines = "".join(params_list)
+    # Strip trailing space to avoid nightmare in doctests
+    lines = "\n".join(l.rstrip(" ") for l in lines.split("\n"))
+    return lines
+
+def _build_repr(self):
+    """TAKEN DIRECTLY FROM SKLEARN TO ENABLE SIMILAR FUNCTIONALTITY IN SliceOneGroupOut"""
+    # XXX This is copied from BaseEstimator's get_params
+    cls = self.__class__
+    init = getattr(cls.__init__, "deprecated_original", cls.__init__)
+    # Ignore varargs, kw and default values and pop self
+    init_signature = signature(init)
+    # Consider the constructor parameters excluding 'self'
+    if init is object.__init__:
+        args = []
+    else:
+        args = sorted(
+            [
+                p.name
+                for p in init_signature.parameters.values()
+                if p.name != "self" and p.kind != p.VAR_KEYWORD
+            ]
+        )
+    class_name = self.__class__.__name__
+    params = dict()
+    for key in args:
+        # We need deprecation warnings to always be on in order to
+        # catch deprecated param values.
+        # This is set in utils/__init__.py but it gets overwritten
+        # when running under python3 somehow.
+        warnings.simplefilter("always", FutureWarning)
+        try:
+            with warnings.catch_warnings(record=True) as w:
+                value = getattr(self, key, None)
+                if value is None and hasattr(self, "cvargs"):
+                    value = self.cvargs.get(key, None)
+            if len(w) and w[0].category is FutureWarning:
+                # if the parameter is deprecated, don't show it
+                continue
+        finally:
+            warnings.filters.pop(0)
+        params[key] = value
+
+    return "%s(%s)" % (class_name, _pprint(params, offset=len(class_name)))
+
 
 def flatten(xss):
     return [x for xs in xss for x in xs]
@@ -103,8 +196,7 @@ def drop_overlapping_subgroups(ytrain,
                     
     return(train_inds[ytrain!=-1], test_inds[ytest!=-1])
 
-class SliceBaseCrossValidator(#_MetadataRequester, 
-                              metaclass=ABCMeta):
+class SliceBaseCrossValidator(metaclass=ABCMeta):
     """Base class for all cross-validators.
 
     Implementations must define `_iter_test_masks` or `_iter_test_indices`.
@@ -117,7 +209,7 @@ class SliceBaseCrossValidator(#_MetadataRequester,
     
 #     __metadata_request__split = {"groups": metadata_routing.UNUSED}
 
-    def split(self, X, y=None, groups=None, secondary_groups=None):
+    def split(self, X, y=None, groups=None, secondary_groups=None, min_n_per_class=5):
         """Generate indices to split data into training and test set.
 
         Parameters
@@ -130,8 +222,16 @@ class SliceBaseCrossValidator(#_MetadataRequester,
             The target variable for supervised learning problems.
 
         groups : array-like of shape (n_samples,), default=None
-            Group labels for the samples used while splitting the dataset into
-            train/test set.
+            Group labels used to separate train and test sets
+            while splitting the dataset.
+            
+        secondary_groups : array-like of shape (n_samples,), default=None
+            Secondary group labels for the samples used for selective 
+            subsampling to ensure no secondary group is present in both train and test sets.
+            
+        min_n_per_class : integer, default=5
+            Determines the minimum number of samples per class that SLICE tries to preserve
+            during stratification and sample removal.
 
         Yields
         ------
@@ -154,7 +254,7 @@ class SliceBaseCrossValidator(#_MetadataRequester,
                                            test_index, 
                                            secondary_groups[train_index], 
                                            secondary_groups[test_index], 
-                                           min_n=5
+                                           min_n=min_n_per_class
                                            )
 
                         
@@ -186,17 +286,17 @@ class SliceBaseCrossValidator(#_MetadataRequester,
 
 
 
-class SliceOneGroupOut(#GroupsConsumerMixin, 
-                       SliceBaseCrossValidator):
-    """Leave One Group Out cross-validator.
+class SliceOneGroupOut(SliceBaseCrossValidator):
+    """SLICE One Group Out cross-validator.
 
     Provides train/test indices to split data such that each training set is
-    comprised of all samples except ones belonging to one specific group.
+    comprised of all samples except ones belonging to one specific group, while
+    ensuring that any secondary group cannot be present in both train and test sets.
     Arbitrary domain specific group information is provided as an array of integers
     that encodes the group of each sample.
 
-    For instance the groups could be the year of collection of the samples
-    and thus allow for cross-validation against time-based splits.
+    For instance the groups could be the etraction batch of collection of the samples, 
+    centers from which samples were processed, or others. 
 
     Read more in the :ref:`User Guide <leave_one_group_out>`.
 
@@ -209,14 +309,37 @@ class SliceOneGroupOut(#GroupsConsumerMixin,
     Examples
     --------
     >>> import numpy as np
+    >>> from slice import SliceOneGroupOut
+    >>> X = np.array([[1, 2], [3, 4], [5, 6], [7, 8], [1, 2], [3, 4], [5, 6], [7, 8]])
+    >>> y = np.array([1, 1, 2, 2, 1, 1, 2, 2])
+    >>> groups = np.array([1, 1, 1, 1, 2, 2, 2, 2])
+    >>> secondary_groups = np.array([1, 2, 1, 2, 1, 2, 1, 2])
+    >>> sogo = SliceOneGroupOut()
+     # 'groups' and `secondary_groups` are always required
+    >>> print( sogo.get_n_splits(X, y, groups=groups, secondary_groups=secondary_groups) )
+    2
+    >>> print(sogo)
+    SliceOneGroupOut()
+    >>>for i, (train_index, test_index) in enumerate(sogo.split(X, 
+    >>>                                                         y, 
+    >>>                                                         groups=groups, 
+    >>>                                                         secondary_groups=secondary_groups, 
+    >>>                                                         min_n_per_class=1
+    >>>                                                         )):
+    ...    print(f"Fold {i}:")
+    ...    print(f"  Train: index={train_index}, group={groups[train_index]}, secondary_group={secondary_groups[train_index]}")
+    ...    print(f"  Test:  index={test_index}, group={groups[test_index]}, secondary_group={secondary_groups[test_index]}")
+
+    
+    >>> import numpy as np
     >>> from sklearn.model_selection import LeaveOneGroupOut
     >>> X = np.array([[1, 2], [3, 4], [5, 6], [7, 8]])
     >>> y = np.array([1, 2, 1, 2])
     >>> groups = np.array([1, 1, 2, 2])
-    >>> logo = SliceOneGroupOut()
-    >>> logo.get_n_splits(X, y, groups)
+    >>> sogo = SliceOneGroupOut()
+    >>> sogo.get_n_splits(X, y, groups)
     2
-    >>> logo.get_n_splits(groups=groups)  # 'groups' is always required
+    >>> sogo.get_n_splits(groups=groups)  # 'groups' is always required
     2
     >>> print(logo)
     SliceOneGroupOut()
@@ -225,15 +348,12 @@ class SliceOneGroupOut(#GroupsConsumerMixin,
     ...     print(f"  Train: index={train_index}, group={groups[train_index]}")
     ...     print(f"  Test:  index={test_index}, group={groups[test_index]}")
     Fold 0:
-      Train: index=[2 3], group=[2 2]
-      Test:  index=[0 1], group=[1 1]
+      Train: index=[4 6], group=[2 2], secondary_group=[1 1]
+      Test:  index=[1 3], group=[1 1], secondary_group=[2 2]
     Fold 1:
-      Train: index=[0 1], group=[1 1]
-      Test:  index=[2 3], group=[2 2]
+      Train: index=[0 2], group=[1 1], secondary_group=[1 1]
+      Test:  index=[5 7], group=[2 2], secondary_group=[2 2]
 
-    See also
-    --------
-    GroupKFold: K-fold iterator variant with non-overlapping groups.
     """
 
     def _iter_test_masks(self, X, y, groups):
@@ -252,7 +372,7 @@ class SliceOneGroupOut(#GroupsConsumerMixin,
         for i in unique_groups:
             yield groups == i
 
-    def get_n_splits(self, X=None, y=None, groups=None):
+    def get_n_splits(self, X=None, y=None, groups=None, secondary_groups=None, min_n_per_class=5):
         """Returns the number of splitting iterations in the cross-validator.
 
         Parameters
@@ -263,11 +383,17 @@ class SliceOneGroupOut(#GroupsConsumerMixin,
         y : object
             Always ignored, exists for compatibility.
 
-        groups : array-like of shape (n_samples,)
-            Group labels for the samples used while splitting the dataset into
-            train/test set. This 'groups' parameter must always be specified to
-            calculate the number of splits, though the other parameters can be
-            omitted.
+        groups : array-like of shape (n_samples,), default=None
+            Group labels used to separate train and test sets
+            while splitting the dataset.
+            
+        secondary_groups : array-like of shape (n_samples,), default=None
+            Secondary group labels for the samples used for selective 
+            subsampling to ensure no secondary group is present in both train and test sets.
+            
+        min_n_per_class : integer, default=5
+            Determines the minimum number of samples per class that SLICE tries to preserve
+            during stratification and sample removal.
 
         Returns
         -------
@@ -279,7 +405,7 @@ class SliceOneGroupOut(#GroupsConsumerMixin,
         groups = check_array(groups, input_name="groups", ensure_2d=False, dtype=None)
         return len(np.unique(groups))
 
-    def split(self, X, y=None, groups=None, secondary_groups=None):
+    def split(self, X, y=None, groups=None, secondary_groups=None, min_n_per_class=5):
         """Generate indices to split data into training and test set.
 
         Parameters
@@ -291,9 +417,17 @@ class SliceOneGroupOut(#GroupsConsumerMixin,
         y : array-like of shape (n_samples,), default=None
             The target variable for supervised learning problems.
 
-        groups : array-like of shape (n_samples,)
-            Group labels for the samples used while splitting the dataset into
-            train/test set.
+        groups : array-like of shape (n_samples,), default=None
+            Group labels used to separate train and test sets
+            while splitting the dataset.
+            
+        secondary_groups : array-like of shape (n_samples,), default=None
+            Secondary group labels for the samples used for selective 
+            subsampling to ensure no secondary group is present in both train and test sets.
+            
+        min_n_per_class : integer, default=5
+            Determines the minimum number of samples per class that SLICE tries to preserve
+            during stratification and sample removal.
 
         Yields
         ------
@@ -303,7 +437,7 @@ class SliceOneGroupOut(#GroupsConsumerMixin,
         test : ndarray
             The testing set indices for that split.
         """
-        return super().split(X, y.astype(int), groups, secondary_groups)
+        return super().split(X, y.astype(int), groups, secondary_groups=secondary_groups, min_n_per_class=min_n_per_class)
 
     
     
