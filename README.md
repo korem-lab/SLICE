@@ -87,52 +87,71 @@ print("Leave-one-group-out auROCs:", *map("{:.2f}".format, logo_aurocs))
 
 ## SLICE resolved these biases, producing the correct null performance
 ##      by accounting for both batch leyers during cross-validation
-print("Leave-one-group-out auROCs:", *map("{:.2f}".format, sogo_aurocs))
+print("SLICE-one-group-out auROCs:", *map("{:.2f}".format, sogo_aurocs))
 ```
 
     Leave-one-group-out auROCs: 0.64 0.73 0.71
-    Leave-one-group-out auROCs: 0.44 0.50 0.46
+    SLICE-one-group-out auROCs: 0.44 0.50 0.46
 
 
-As demontrated in this example, neglecting to account for inner batch structures cann introduce biases in evaluations.
+As demontrated in this example, neglecting to account for inner batch structures can introduce biases in evaluations.
 
 
 
 **Classes**
 ---------
+The main class in the SLICE package is `SliceOneGroupOut`. 
 
 ### SliceOneGroupOut
 
-Provides train/test indices to split data in train/test sets with rebalancing to ensure that all training folds have identical class balances. Each sample is used once as a test set, while the remaining samples form the training set. See sklearn.model_selection.LeaveOneOut for more details on Leave-one-out cross-validation. 
+    Provides train/test indices to split data such that each training set is
+    comprised of all samples except ones belonging to one specific group, while
+    ensuring that any secondary group cannot be present in both train and test sets.
+    Arbitrary domain specific group information is provided as an array of integers
+    that encodes the group of each sample.
 
-##### **Parameters**
-No parameters are used for this class 
+    For instance the groups could be the etraction batch of collection of the samples, 
+    centers from which samples were processed, or others. 
 
-### RebalancedKFold
+    Designed to have similar functionality as scikit-learn's `LeaveOneGroupOut`
 
-Provides train/test indices to split data in `n_splits` folds, with rebalancing to ensure that all training folds have identical class balances. Each sample is only ever used within a single test fold. `RebalancedKFold` uses the following parameters, which are the same as the scikit-learn `StratifiedKFold` parameters (see sklearn.model_selection.StratifiedKFold for more details):
+The main method used in by `SliceOneGroupOut` is `.split`:
 
-##### **Parameters**
-    n_splits : int, default=5
-        Number of folds. Must be at least 2.
+#### split(self, X, y=None, groups=None, secondary_groups=None, min_n_per_class=5):
+        """Generate indices to split data into training and test set.
 
-        .. versionchanged:: 0.22
-            ``n_splits`` default value changed from 3 to 5.
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, where `n_samples` is the number of samples
+            and `n_features` is the number of features.
 
-    shuffle : bool, default=False
-        Whether to shuffle each class's samples before splitting into batches.
-        Note that the samples within each split will not be shuffled.
+        y : array-like of shape (n_samples,), default=None
+            The target variable for supervised learning problems.
 
-    random_state : int, RandomState instance or None, default=None
-        When `shuffle` is True, `random_state` affects the ordering of the
-        indices, which controls the randomness of each fold for each class.
-        Otherwise, leave `random_state` as `None`.
-        Pass an int for reproducible output across multiple function calls.
-        See :term:`Glossary <random_state>`.
+        groups : array-like of shape (n_samples,), default=None
+            Group labels used to separate train and test sets
+            while splitting the dataset.
+            
+        secondary_groups : array-like of shape (n_samples,), default=None
+            Secondary group labels for the samples used for selective 
+            subsampling to ensure no secondary group is present in both train and test sets.
+            
+        min_n_per_class : integer, default=5
+            Determines the minimum number of samples per class that SLICE tries to preserve
+            during stratification and sample removal.
 
+        Yields
+        ------
+        train : ndarray
+            The training set indices for that split.
+
+        test : ndarray
+            The testing set indices for that split.
+        """
 
 
 **Citation**
 -------
 TBD
-Austin, G.I. et al. “Conservative evaluation demonstrates tumor-specific microbial signatures that generalize across processing pipelines” (2025). LINK TBD
+Austin, G.I. et al. “Tumor-specific microbial signatures generalize across clinical sites, laboratories, and bioinformatic pipelines” (2025). LINK TBD
