@@ -37,8 +37,6 @@ class SLICEtest(unittest.TestCase):
 
         ## Run Cross-validations
 
-                      for train_index, test_index in logo.split(X, y, b2) ]
-
         ## SLICE-one-group-out auROCs
         sogo=SliceOneGroupOut()
         sogo_aurocs = [ roc_auc_score(y[test_index],
