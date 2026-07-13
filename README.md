@@ -153,4 +153,4 @@ The main method used in by `SliceOneGroupOut` is `.split`:
 
 **Citation**
 -------
-Austin, G.I. et al. “Tumor-specific microbial signatures generalize across clinical sites, laboratories, and bioinformatic pipelines” (2025).
+Austin, G.I. et al. “Tumor-specific microbial signatures generalize across clinical sites, laboratories, bioinformatic pipelines, studies, and countries” (2026).
