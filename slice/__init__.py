@@ -193,8 +193,16 @@ def drop_overlapping_subgroups(ytrain,
                     else:
                         ytrain[train_mask] = -1
                         traintotals=possible_train_counts
-                    
-    return(train_inds[ytrain!=-1], test_inds[ytest!=-1])
+
+    ## don't return any inds if we ended up unable to meet the min_n criteria
+    if pd.Series( ytrain[ytrain!=-1] ).value_counts().min() >= min_n and \
+             pd.Series( ytest[ytest!=-1] ).value_counts().min() >= min_n and \
+                np.unique( ytrain[ytrain!=-1] ).shape[0] == 2 and \
+                    np.unique( ytest[ytest!=-1] ).shape[0] == 2 :
+         return(train_inds[ytrain!=-1], test_inds[ytest!=-1])
+
+    else:
+        return([], [])
 
 class SliceBaseCrossValidator(metaclass=ABCMeta):
     """Base class for all cross-validators.
@@ -218,7 +226,7 @@ class SliceBaseCrossValidator(metaclass=ABCMeta):
             Training data, where `n_samples` is the number of samples
             and `n_features` is the number of features.
 
-        y : array-like of shape (n_samples,)
+        y : binary array-like of shape (n_samples,)
             The target variable for supervised learning problems.
 
         groups : array-like of shape (n_samples,), default=None
@@ -241,7 +249,12 @@ class SliceBaseCrossValidator(metaclass=ABCMeta):
         test : ndarray
             The testing set indices for that split.
         """
+
         X, y, groups = indexable(X, y, groups)
+
+        if np.unique(y).shape[0] != 2:
+            raise(ValueError('y must be binary! Please reach out to George Austin if you would like multiclass / regression support added'))
+
         indices = np.arange(_num_samples(X))
         for test_index in self._iter_test_masks(X, y, groups):
             train_index = indices[np.logical_not(test_index)]
