@@ -199,6 +199,11 @@ def drop_overlapping_subgroups(ytrain,
             if type(ytrain==int):
                 ytrain=np.array(ytrain)
 
+    if type(ytest)==int:
+        ytest=np.array(ytest)
+    if type(ytrain==int):
+        ytrain=np.array(ytrain)
+
     ## don't return any inds if we ended up unable to meet the min_n criteria
     if pd.Series( ytrain[ytrain!=-1] ).value_counts().min() >= min_n and \
              pd.Series( ytest[ytest!=-1] ).value_counts().min() >= min_n and \
